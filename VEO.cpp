@@ -1,7 +1,10 @@
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-
+#include <glad\glad.h>
+#include <GLFW\glfw3.h>
+#include "EasyShader.h"
 #include <iostream>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 using namespace std;
 
@@ -14,37 +17,33 @@ const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
 
-char *vertexShaderSource =
+char *vsource =
 "#version 330 core\n"
-"layout (location = 0) in vec3 pos;\n"
+"layout (location = 0) in vec3 coord;\n"
+"layout (location = 0) in vec3 color;\n"
+"out vec3 outcolor;\n"
 "void main(){\n"
-"gl_Position = vec4(pos, 1);\n"
-"}\n\0";
+"gl_Positon = coord;\n"
+"outcolor = color;\n"
+"}\n";
 
-
-char *fragmentShaderSource =
+char *fsource =
 "#version 330 core\n"
-"out vec4 fragmentcolor;\n"
-"uniform vec4 green;\n"
+"int vec3 outcolor;\n"
+"out vec4 color"
 "void main(){\n"
-"fragmentcolor = green;\n"
-"}\n\0";
-
-
-
-
+"color = vec4(outcolor, 1);\n"
+"}\n";
 
 int main()
 {
     // glfw: initialize and configure
-    // ------------------------------
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    
+
     // glfw window creation
-    // --------------------
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
     if (window == NULL)
     {
@@ -56,72 +55,56 @@ int main()
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     // glad: load all OpenGL function pointers
-    // ---------------------------------------
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
-
-
-    //创建顶点数据
     float vertex[] = {
-        0,  0.5,    0,
-        -0.5, -0.5, 0,
-        0.5,  -0.5, 0
+        -0.5, 0.5, 0,   1, 1, 1,
+        0.5, 0.5, 0,   1, 0, 0,
+        -0.5, -0.5, 0, 0, 1, 0,
+        0.5, -0.5, 0, 0, 0, 1,
     };
-    unsigned int VAO, VBO;
+    int indexs[] = {
+        0, 1, 2,
+        1, 2, 3
+    };
+
+    unsigned int VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
+
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertex), vertex, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);  //要记得ENABLE
-    glBindVertexArray(VAO);
+                //GL_ARRAY_BUFFER,而不是VBO
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertex), vertex, GL_STATIC_DRAW); 
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);                                       //而不是(void*)3
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+                //GL_ELEMENT_ARRAY_BUFFER,而不是EBO 
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indexs), indexs, GL_STATIC_DRAW); 
+    //对于EBO不需要glVertexAttribPointer这一步
 
 
 
-    int success;
-    char loginfo[512];
+    unsigned int vertexshader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexshader, 1, &vsource, NULL);
+    glCompileShader(vertexshader);
 
-    //创建顶点着色器
-    int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, loginfo);
-        cout << "vertexshader compile fail:" << loginfo << endl;
-    }
+    unsigned int fragmentshader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentshader, 1, &fsource, NULL);
+    glCompileShader(fragmentshader);
 
-    //创建片段着色器
-    int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragmentShader, 512, 0, loginfo);
-        cout << "fragment compile fail:" << loginfo << endl;
-    }
-
-    //创建program
-    int program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
+    unsigned int program = glCreateProgram();
+    glAttachShader(program, vertexshader);
+    glAttachShader(program, fragmentshader);
     glLinkProgram(program);
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(program, 512, NULL, loginfo);
-        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << loginfo << std::endl;
-    }
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-
 
 
     // render loop
@@ -134,14 +117,11 @@ int main()
 
         glClearColor(0.5, 0, 0.5, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-
+        
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glUseProgram(program);
-        float time = glfwGetTime();
-        float green = sin(time) / 2.0 + 0.5;
-        int uniformPos = glGetUniformLocation(program, "green");
-        glUniform4f(uniformPos, 0, green, 0, 1);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -153,7 +133,10 @@ int main()
     // ------------------------------------------------------------------
     glfwTerminate();
     return 0;
+
+
 }
+
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
